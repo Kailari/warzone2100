@@ -261,8 +261,7 @@ std::vector<std::reference_wrapper<const KeyFunctionInfo>> getVisibleKeymapEntri
 	std::vector<std::reference_wrapper<const KeyFunctionInfo>> visibleMappings;
 	for (const KeyFunctionInfo& info : allKeymapEntries())
 	{
-		// TODO: this does not hide keybinds which used to have __HIDE status
-		if (info.context != InputContext::__DEBUG)
+		if (info.type != KeyMappingType::HIDDEN)
 		{
 			visibleMappings.push_back(info);
 		}
@@ -343,11 +342,11 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	const KeyFunctionInfo& info = data.targetFunctionData->info;
 
 	// Draw base
-	if (keyMapSelection.isSelected(data.targetFunctionData->info.function, data.slot))
+	if (keyMapSelection.isSelected(info.function, data.slot))
 	{
 		pie_BoxFill(x, y, x + w, y + h, WZCOL_KEYMAP_ACTIVE);
 	}
-	else if (!info.assignable)
+	else if (info.type != KeyMappingType::ASSIGNABLE)
 	{
 		pie_BoxFill(x, y, x + w, y + h, WZCOL_KEYMAP_FIXED);
 	}
@@ -372,7 +371,7 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	}
 	else
 	{
-		strcpy(sPrimaryKey, info.assignable ? NOT_BOUND_LABEL.c_str() : "\0");
+		strcpy(sPrimaryKey, info.type == KeyMappingType::ASSIGNABLE ? NOT_BOUND_LABEL.c_str() : "\0");
 	}
 
 	data.wzBindingText.setText(sPrimaryKey, iV_fonts::font_regular);
@@ -481,10 +480,7 @@ bool saveKeyMap()
 		}
 
 		ini.setValue("action", mapping.action);
-		if (auto info = keyFunctionInfoByFunction(mapping.function))
-		{
-			ini.setValue("function", info->name);
-		}
+		ini.setValue("function", mapping.info->name);
 
 		ini.nextArrayItem();
 	}
@@ -569,7 +565,7 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 
 		const int slotIndex = static_cast<unsigned int>(data->slot);
 		const KeyFunctionInfo& info = data->targetFunctionData->info;
-		if (!info.assignable)
+		if (info.type != KeyMappingType::ASSIGNABLE)
 		{
 			audio_PlayTrack(ID_SOUND_BUILD_FAIL);
 			unhighlightSelected();
@@ -761,7 +757,7 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 	const KeyFunctionInfo& info = keyMapSelection.data->info;
 
 	/* check if bound to a fixed combo. */
-	if (!info.assignable)
+	if (info.type != KeyMappingType::ASSIGNABLE)
 	{
 		unhighlightSelected();
 		return false;
