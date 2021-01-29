@@ -36,6 +36,7 @@
 #include "lib/sound/audio.h"
 #include "lib/sound/audio_id.h"
 #include "lib/widget/button.h"
+#include "lib/widget/label.h"
 #include "lib/widget/scrollablelist.h"
 
 #include "frend.h"
@@ -94,16 +95,14 @@ private:
 };
 
 struct DisplayKeyMapData {
-	explicit DisplayKeyMapData(void (* const function)(), const std::string name)
+	explicit DisplayKeyMapData(const KeyFunctionInfo& info)
 		: mappings(std::vector<KEY_MAPPING*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
-		, function(function)
-		, name(name)
+		, info(info)
 	{
 	}
 
 	std::vector<KEY_MAPPING*> mappings;
-	void (*function)();
-	const std::string name; // TODO refact-process-input: is this required?
+	const KeyFunctionInfo& info;
 
 	WzText wzNameText;
 };
@@ -125,7 +124,7 @@ struct KeyMappingSelection {
 public:
 	bool isSelected(void (*const otherFunction)(), const KeyMappingSlot otherSlot) const
 	{
-		return hasActiveSelection && data->function == otherFunction && slot == otherSlot;
+		return hasActiveSelection && data->info.function == otherFunction && slot == otherSlot;
 	}
 
 	void select(const KeyMappingSlot newSlot, DisplayKeyMapData* const newData)
@@ -341,15 +340,14 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	int h = psWidget->height();
 	int w = psWidget->width();
 
-	const KeyFunctionInfo* info = keyFunctionInfoByFunction(data.targetFunctionData->function);
-	ASSERT_OR_RETURN(, info != nullptr, "Invalid key function on key map button, could not find matching key function info!");
+	const KeyFunctionInfo& info = data.targetFunctionData->info;
 
 	// Draw base
-	if (keyMapSelection.isSelected(data.targetFunctionData->function, data.slot))
+	if (keyMapSelection.isSelected(data.targetFunctionData->info.function, data.slot))
 	{
 		pie_BoxFill(x, y, x + w, y + h, WZCOL_KEYMAP_ACTIVE);
 	}
-	else if (!info->assignable)
+	else if (!info.assignable)
 	{
 		pie_BoxFill(x, y, x + w, y + h, WZCOL_KEYMAP_FIXED);
 	}
@@ -374,10 +372,10 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	}
 	else
 	{
-		strcpy(sPrimaryKey, info->assignable ? NOT_BOUND_LABEL.c_str() : "\0");
+		strcpy(sPrimaryKey, info.assignable ? NOT_BOUND_LABEL.c_str() : "\0");
 	}
 
-	data.wzBindingText.setText(sPrimaryKey, font_regular);
+	data.wzBindingText.setText(sPrimaryKey, iV_fonts::font_regular);
 	data.wzBindingText.render(x, y + (h / 2) + 3, bindingTextColor);
 }
 
@@ -404,7 +402,7 @@ static void displayKeyMapLabel(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset)
 	const int w = psWidget->width();
 	const int h = psWidget->height();
 	drawBlueBoxInset(x, y, w, h);
-	data.wzNameText.setText(_(data.name.c_str()), font_regular);
+	data.wzNameText.setText(_(data.info.displayName.c_str()), font_regular);
 	data.wzNameText.render(x + 2, y + (psWidget->height() / 2) + 3, WZCOL_FORM_TEXT);
 }
 
@@ -570,9 +568,8 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 		const DisplayKeyMapButtonData* data = static_cast<DisplayKeyMapButtonData*>(clickedButton.pUserData);
 
 		const int slotIndex = static_cast<unsigned int>(data->slot);
-		const KeyFunctionInfo* info = keyFunctionInfoByFunction(data->targetFunctionData->function);
-		ASSERT_OR_RETURN(, info != nullptr, "Could not find key function info for function during onClick handler!");
-		if (!info->assignable)
+		const KeyFunctionInfo& info = data->targetFunctionData->info;
+		if (!info.assignable)
 		{
 			audio_PlayTrack(ID_SOUND_BUILD_FAIL);
 			unhighlightSelected();
@@ -580,7 +577,7 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 		}
 
 		const KEY_MAPPING* clickedMapping = data->targetFunctionData->mappings[slotIndex];
-		if (clickedMapping && keyMapSelection.isSelected(data->targetFunctionData->function, data->slot))
+		if (clickedMapping && keyMapSelection.isSelected(info.function, data->slot))
 		{
 			unhighlightSelected();
 			return;
@@ -638,14 +635,29 @@ void KeyMapForm::initialize(bool isInGame)
 
 	auto infos = getVisibleKeymapEntries();
 	std::sort(infos.begin(), infos.end(), [](const KeyFunctionInfo& a, const KeyFunctionInfo& b) {
-		return a.displayName < b.displayName;
+		const bool bContextsAreSame = a.context == b.context;
+		return bContextsAreSame
+			? a.displayName < b.displayName
+			: a.context.getDisplayName() < b.context.getDisplayName();
 	});
 
 	/* Add key mappings to the form */
 	for (std::vector<std::reference_wrapper<const KeyFunctionInfo>>::const_iterator i = infos.begin(); i != infos.end(); ++i)
 	{
 		const KeyFunctionInfo& info = *i;
-		DisplayKeyMapData* data = new DisplayKeyMapData(info.function, info.displayName);
+
+		/* Add separator if changing categories */
+		const bool bShouldAddSeparator = i == infos.begin() || std::prev(i)->get().context != info.context;
+		if (bShouldAddSeparator)
+		{
+			auto separator = std::make_shared<W_LABEL>();
+			separator->setGeometry(0, 0, KM_ENTRYW, KM_ENTRYH * 2);
+			separator->setTextAlignment(WzTextAlignment::WLAB_ALIGNBOTTOMLEFT);
+			separator->setFormattedString(_(info.context.getDisplayName().c_str()), KM_ENTRYW, iV_fonts::font_large);
+			keyMapList->addItem(separator);
+		}
+
+		DisplayKeyMapData* data = new DisplayKeyMapData(info);
 
 		const unsigned int numSlots = static_cast<unsigned int>(KeyMappingSlot::LAST);
 
@@ -746,33 +758,31 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 		metakey = KEY_LMETA;
 	}
 
-	const auto selectedFunction = keyMapSelection.data->function;
-	const KeyFunctionInfo* info = keyFunctionInfoByFunction(selectedFunction);
-	ASSERT_OR_RETURN(false, info != nullptr, "Could not find key function info for function while creating a new mapping!");
+	const KeyFunctionInfo& info = keyMapSelection.data->info;
 
 	/* check if bound to a fixed combo. */
-	if (!info->assignable)
+	if (!info.assignable)
 	{
 		unhighlightSelected();
 		return false;
 	}
 
 	/* Clear down mappings using these keys */
-	clearKeyMappingIfConflicts(metakey, input, info->context);
+	clearKeyMappingIfConflicts(metakey, input, info.context);
 
 	/* Try and see if its there already - add it if not. e.g. secondary keybinds are expected to be null on default key sets */
 	const unsigned int slotIndex = static_cast<unsigned int>(keyMapSelection.slot);
-	KEY_MAPPING* psMapping = keyGetMappingFromFunction(selectedFunction, keyMapSelection.slot);
+	KEY_MAPPING* psMapping = keyGetMappingFromFunction(info.function, keyMapSelection.slot);
 	if (!psMapping)
 	{
-		psMapping = keyAddMapping(metakey, input, KEY_ACTION::KEYMAP_PRESSED, selectedFunction, keyMapSelection.slot);
+		psMapping = keyAddMapping(metakey, input, KEY_ACTION::KEYMAP_PRESSED, info.function, keyMapSelection.slot);
 		keyMapSelection.data->mappings[slotIndex] = psMapping;
 	}
 	else
 	{
 		/* Found existing mapping, alter it to the new values */
 		psMapping->input       = input;
-		psMapping->info        = info;
+		psMapping->info        = &info;
 		psMapping->metaKeyCode = metakey;
 	}
 	invalidateKeyMappingSortOrder();
