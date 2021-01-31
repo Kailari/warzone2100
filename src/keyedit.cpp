@@ -96,12 +96,12 @@ private:
 
 struct DisplayKeyMapData {
 	explicit DisplayKeyMapData(const KeyFunctionInfo& info)
-		: mappings(std::vector<KEY_MAPPING*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
+		: mappings(std::vector<KeyMapping*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
 		, info(info)
 	{
 	}
 
-	std::vector<KEY_MAPPING*> mappings;
+	std::vector<KeyMapping*> mappings;
 	const KeyFunctionInfo& info;
 
 	WzText wzNameText;
@@ -118,7 +118,7 @@ struct DisplayKeyMapButtonData {
 
 struct KeyMappingSelection {
 	bool               hasActiveSelection;
-	KeyMappingSlot slot;
+	KeyMappingSlot     slot;
 	DisplayKeyMapData* data;
 
 public:
@@ -267,19 +267,18 @@ std::vector<std::reference_wrapper<const KeyFunctionInfo>> getVisibleKeymapEntri
 		}
 	}
 
-
 	return visibleMappings;
 }
 
-std::vector<std::reference_wrapper<const KEY_MAPPING>> getVisibleMappings()
+std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings()
 {
-	std::vector<std::reference_wrapper<const KEY_MAPPING>> visibleMappings;
+	std::vector<std::reference_wrapper<const KeyMapping>> visibleMappings;
 	for (const KeyFunctionInfo& info : getVisibleKeymapEntries())
 	{
 		for (unsigned int slotIndex = 0; slotIndex < static_cast<unsigned int>(KeyMappingSlot::LAST); ++slotIndex)
 		{
 			const KeyMappingSlot slot = static_cast<KeyMappingSlot>(slotIndex);
-			if (const KEY_MAPPING* mapping = keyGetMappingFromFunction(info.function, slot))
+			if (const KeyMapping* mapping = keyGetMappingFromFunction(info.function, slot))
 			{
 				visibleMappings.push_back(*mapping);
 			}
@@ -299,7 +298,7 @@ static unsigned int getMaxKeyMapNameWidth()
 		max = static_cast<int>(displayText.width());
 
 		char sKey[MAX_STR_LENGTH];
-		for (const KEY_MAPPING& mapping : getVisibleMappings()) {
+		for (const KeyMapping& mapping : getVisibleMappings()) {
 			mapping.toString(sKey);
 			displayText.setText(sKey, font_regular);
 			max = MAX(max, static_cast<unsigned int>(displayText.width()));
@@ -356,7 +355,7 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	}
 
 	// Select label text and color
-	const KEY_MAPPING* mapping = data.targetFunctionData->mappings[static_cast<unsigned int>(data.slot)];
+	const KeyMapping* mapping = data.targetFunctionData->mappings[static_cast<unsigned int>(data.slot)];
 	PIELIGHT bindingTextColor = WZCOL_FORM_TEXT;
 	char sPrimaryKey[MAX_STR_LENGTH];
 	if (mapping && !mapping->input.isCleared())
@@ -508,7 +507,9 @@ static KeyMappingInput createInputForSource(const KeyMappingInputSource source, 
 bool loadKeyMap()
 {
 	// throw away any keymaps!!
-	keyMappings.clear();
+	keyMappings.remove_if([](const KeyMapping& mapping) {
+		return mapping.info->type == KeyMappingType::ASSIGNABLE;
+	});
 
 	WzConfig ini(KeyMapPath, WzConfig::ReadOnly);
 	if (!ini.status())
@@ -578,7 +579,7 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 			return;
 		}
 
-		const KEY_MAPPING* clickedMapping = data->targetFunctionData->mappings[slotIndex];
+		const KeyMapping* clickedMapping = data->targetFunctionData->mappings[slotIndex];
 		if (clickedMapping && keyMapSelection.isSelected(info.function, data->slot))
 		{
 			unhighlightSelected();
@@ -774,7 +775,7 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 
 	/* Try and see if its there already - add it if not. e.g. secondary keybinds are expected to be null on default key sets */
 	const unsigned int slotIndex = static_cast<unsigned int>(keyMapSelection.slot);
-	KEY_MAPPING* psMapping = keyGetMappingFromFunction(info.function, keyMapSelection.slot);
+	KeyMapping* psMapping = keyGetMappingFromFunction(info.function, keyMapSelection.slot);
 	if (!psMapping)
 	{
 		psMapping = keyAddMapping(metakey, input, KeyAction::PRESSED, info.function, keyMapSelection.slot);
