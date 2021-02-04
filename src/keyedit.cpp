@@ -27,6 +27,7 @@
 // includes
 #include <string.h>
 #include <physfs.h>
+#include <unordered_map>
 #include <optional-lite/optional.hpp>
 
 #include "lib/framework/frame.h"
@@ -69,6 +70,27 @@
 #define KM_ENTRYW			(FRONTEND_BOTFORMW - 80)
 #define KM_ENTRYH			(16)
 
+struct DisplayKeyMapData {
+	explicit DisplayKeyMapData(InputManager& inputManager, const KeyFunctionInfo& info)
+		: inputManager(inputManager)
+		, mappings(std::vector<KeyMapping*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
+		, info(info)
+	{
+	}
+
+	InputManager& inputManager;
+	std::vector<KeyMapping*> mappings;
+	const KeyFunctionInfo& info;
+
+	WzText wzNameText;
+};
+
+struct DisplayKeyMapButtonData {
+	WzText wzBindingText;
+	KeyMappingSlot slot;
+	DisplayKeyMapData* targetFunctionData;
+};
+
 class KeyMapForm : public IntFormAnimated
 {
 protected:
@@ -102,30 +124,11 @@ public:
 private:
 	InputManager& inputManager;
 	std::shared_ptr<ScrollableListWidget> keyMapList;
+	std::unordered_map<MappableFunction, DisplayKeyMapData*> displayDataPerFunction;
+
 	std::shared_ptr<W_BUTTON> createKeyMapButton(const unsigned int id, const KeyMappingSlot slot, struct DisplayKeyMapData* targetFunctionData);
 	void unhighlightSelected();
 	void addButton(int buttonId, int y, const char *text);
-};
-
-struct DisplayKeyMapData {
-	explicit DisplayKeyMapData(InputManager& inputManager, const KeyFunctionInfo& info)
-		: inputManager(inputManager)
-		, mappings(std::vector<KeyMapping*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
-		, info(info)
-	{
-	}
-
-	InputManager& inputManager;
-	std::vector<KeyMapping*> mappings;
-	const KeyFunctionInfo& info;
-
-	WzText wzNameText;
-};
-
-struct DisplayKeyMapButtonData {
-	WzText wzBindingText;
-	KeyMappingSlot slot;
-	DisplayKeyMapData* targetFunctionData;
 };
 
 // ////////////////////////////////////////////////////////////////////////////
@@ -134,25 +137,24 @@ struct DisplayKeyMapButtonData {
 struct KeyMappingSelection {
 	bool               hasActiveSelection;
 	KeyMappingSlot     slot;
-	DisplayKeyMapData* data;
+	MappableFunction   function;
 
-public:
 	bool isSelected(void (*const otherFunction)(), const KeyMappingSlot otherSlot) const
 	{
-		return hasActiveSelection && data->info.function == otherFunction && slot == otherSlot;
+		return hasActiveSelection && function == otherFunction && slot == otherSlot;
 	}
 
-	void select(const KeyMappingSlot newSlot, DisplayKeyMapData* const newData)
+	void select(const KeyMappingSlot newSlot, const MappableFunction newFunction)
 	{
 		hasActiveSelection = true;
 		slot = newSlot;
-		data = newData;
+		function = newFunction;
 	}
 
 	void clearSelection()
 	{
 		hasActiveSelection = false;
-		data = nullptr;
+		function = nullptr;
 		slot = KeyMappingSlot::LAST;
 	}
 };
@@ -597,7 +599,7 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 		}
 
 		keyMapList->disableScroll();
-		keyMapSelection.select(data->slot, data->targetFunctionData);
+		keyMapSelection.select(data->slot, data->targetFunctionData->info.function);
 	});
 
 	return button;
@@ -655,6 +657,7 @@ void KeyMapForm::initialize(bool isInGame)
 	});
 
 	/* Add key mappings to the form */
+	displayDataPerFunction.clear();
 	for (std::vector<std::reference_wrapper<const KeyFunctionInfo>>::const_iterator i = infos.begin(); i != infos.end(); ++i)
 	{
 		const KeyFunctionInfo& info = *i;
@@ -671,6 +674,7 @@ void KeyMapForm::initialize(bool isInGame)
 		}
 
 		DisplayKeyMapData* data = new DisplayKeyMapData(inputManager, info);
+		displayDataPerFunction.insert({ info.function, data });
 
 		const unsigned int numSlots = static_cast<unsigned int>(KeyMappingSlot::LAST);
 
@@ -771,34 +775,42 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 		metakey = KEY_LMETA;
 	}
 
-	const KeyFunctionInfo& info = keyMapSelection.data->info;
+	const KeyFunctionInfo* info = keyFunctionInfoByFunction(keyMapSelection.function);
+	ASSERT_OR_RETURN(false, info != nullptr, "Could not find matching key function info while creating new mapping!");
 
 	/* check if bound to a fixed combo. */
-	if (info.type != KeyMappingType::ASSIGNABLE)
+	if (info->type != KeyMappingType::ASSIGNABLE)
 	{
 		unhighlightSelected();
 		return false;
 	}
 
-	/* Clear down mappings using these keys */
-	inputManager.removeConflictingMappings(metakey, input, info.context);
+	/* Clear conflicting mappings using these keys */
+	const auto conflicts = inputManager.removeConflictingMappings(metakey, input, info->context);
+	for (auto& conflict : conflicts)
+	{
+		// Update conflicting mappings' display data
+		if (auto conflictData = displayDataPerFunction[conflict.info->function])
+		{
+			const unsigned int slotIndex = static_cast<unsigned int>(conflict.slot);
+			conflictData->mappings[slotIndex] = nullptr;
+		}
+	}
 
-	/* Try and see if its there already - add it if not. e.g. secondary keybinds are expected to be null on default key sets */
-	const unsigned int slotIndex = static_cast<unsigned int>(keyMapSelection.slot);
-	KeyMapping* psMapping = inputManager.getMappingFromFunction(info.function, keyMapSelection.slot);
-	if (!psMapping)
+	/* Try and see if the mapping already exists. Remove the old mapping first and then create a new one. */
+	if (KeyMapping* oldMapping = inputManager.getMappingFromFunction(info->function, keyMapSelection.slot))
 	{
-		psMapping = inputManager.addMapping(metakey, input, KeyAction::PRESSED, info.function, keyMapSelection.slot);
-		keyMapSelection.data->mappings[slotIndex] = psMapping;
+		inputManager.removeMapping(oldMapping);
 	}
-	else
+
+	KeyMapping* newMapping = inputManager.addMapping(metakey, input, KeyAction::PRESSED, info->function, keyMapSelection.slot);
+
+	// Update display data for the new mapping
+	if (auto displayData = displayDataPerFunction[info->function])
 	{
-		/* Found existing mapping, alter it to the new values */
-		psMapping->input       = input;
-		psMapping->info        = &info;
-		psMapping->metaKeyCode = metakey;
+		const unsigned int slotIndex = static_cast<unsigned int>(keyMapSelection.slot);
+		displayData->mappings[slotIndex] = newMapping;
 	}
-	invalidateKeyMappingSortOrder();
 	maxKeyMapNameWidthDirty = true;
 	unhighlightSelected();
 	return true;
