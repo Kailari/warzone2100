@@ -72,14 +72,26 @@
 class KeyMapForm : public IntFormAnimated
 {
 protected:
-	KeyMapForm(): IntFormAnimated(false) {}
+	KeyMapForm(InputManager& inputManager)
+		: IntFormAnimated(false)
+		, inputManager(inputManager)
+	{
+	}
+
 	void initialize(bool isInGame);
 
 public:
-	static std::shared_ptr<KeyMapForm> make(bool isInGame)
+	static std::shared_ptr<KeyMapForm> make(InputManager& inputManager, const bool isInGame)
 	{
-		class make_shared_enabler: public KeyMapForm {};
-		auto widget = std::make_shared<make_shared_enabler>();
+		class make_shared_enabler: public KeyMapForm
+		{
+		public:
+			make_shared_enabler(InputManager& inputManager)
+				: KeyMapForm(inputManager)
+			{
+			}
+		};
+		auto widget = std::make_shared<make_shared_enabler>(inputManager);
 		widget->initialize(isInGame);
 		return widget;
 	}
@@ -88,6 +100,7 @@ public:
 	bool pushedKeyCombo(const KeyMappingInput input);
 
 private:
+	InputManager& inputManager;
 	std::shared_ptr<ScrollableListWidget> keyMapList;
 	std::shared_ptr<W_BUTTON> createKeyMapButton(const unsigned int id, const KeyMappingSlot slot, struct DisplayKeyMapData* targetFunctionData);
 	void unhighlightSelected();
@@ -95,12 +108,14 @@ private:
 };
 
 struct DisplayKeyMapData {
-	explicit DisplayKeyMapData(const KeyFunctionInfo& info)
-		: mappings(std::vector<KeyMapping*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
+	explicit DisplayKeyMapData(InputManager& inputManager, const KeyFunctionInfo& info)
+		: inputManager(inputManager)
+		, mappings(std::vector<KeyMapping*>(static_cast<unsigned int>(KeyMappingSlot::LAST), nullptr))
 		, info(info)
 	{
 	}
 
+	InputManager& inputManager;
 	std::vector<KeyMapping*> mappings;
 	const KeyFunctionInfo& info;
 
@@ -190,11 +205,11 @@ static MOUSE_KEY_CODE scanMouseForPressedBindableKey()
 	return (MOUSE_KEY_CODE)0;
 }
 
-bool runInGameKeyMapEditor(unsigned id)
+bool runInGameKeyMapEditor(InputManager& inputManager, unsigned id)
 {
 	if (id == KM_RETURN || id == KM_GO_BACK)			// return
 	{
-		saveKeyMap();
+		saveKeyMap(inputManager);
 		widgDelete(psWScreen, KM_FORM);
 		inputLoseFocus();
 		bAllowOtherKeyPresses = true;
@@ -208,10 +223,10 @@ bool runInGameKeyMapEditor(unsigned id)
 	if (id == KM_DEFAULT)
 	{
 		// reinitialise key mappings
-		keyInitMappings(true);
+		inputManager.resetMappings(true);
 		widgDelete(psWScreen, KM_FORM); // readd the widgets
 		maxKeyMapNameWidthDirty = true;
-		startInGameKeyMapEditor(false);
+		startInGameKeyMapEditor(inputManager, false);
 	}
 
 	if (auto kmForm = (KeyMapForm *)widgGetFromID(psWScreen, KM_FORM))
@@ -222,22 +237,22 @@ bool runInGameKeyMapEditor(unsigned id)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
-bool runKeyMapEditor()
+bool runKeyMapEditor(InputManager& inputManager)
 {
 	WidgetTriggers const &triggers = widgRunScreen(psWScreen);
 	unsigned id = triggers.empty() ? 0 : triggers.front().widget->id; // Just use first click here, since the next click could be on another menu.
 
 	if (id == KM_RETURN)			// return
 	{
-		saveKeyMap();
+		saveKeyMap(inputManager);
 		changeTitleMode(OPTIONS);
 	}
 	if (id == KM_DEFAULT)
 	{
 		// reinitialise key mappings
-		keyInitMappings(true);
+		inputManager.resetMappings(true);
 		widgDelete(psWScreen, FRONTEND_BACKDROP); // readd the widgets
-		startKeyMapEditor(false);
+		startKeyMapEditor(inputManager, false);
 	}
 
 	if (auto kmForm = (KeyMapForm *)widgGetFromID(psWScreen, KM_FORM))
@@ -270,7 +285,7 @@ std::vector<std::reference_wrapper<const KeyFunctionInfo>> getVisibleKeymapEntri
 	return visibleMappings;
 }
 
-std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings()
+std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings(InputManager& inputManager)
 {
 	std::vector<std::reference_wrapper<const KeyMapping>> visibleMappings;
 	for (const KeyFunctionInfo& info : getVisibleKeymapEntries())
@@ -278,7 +293,7 @@ std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings()
 		for (unsigned int slotIndex = 0; slotIndex < static_cast<unsigned int>(KeyMappingSlot::LAST); ++slotIndex)
 		{
 			const KeyMappingSlot slot = static_cast<KeyMappingSlot>(slotIndex);
-			if (const KeyMapping* mapping = keyGetMappingFromFunction(info.function, slot))
+			if (const KeyMapping* mapping = inputManager.getMappingFromFunction(info.function, slot))
 			{
 				visibleMappings.push_back(*mapping);
 			}
@@ -288,7 +303,7 @@ std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings()
 	return visibleMappings;
 }
 
-static unsigned int getMaxKeyMapNameWidth()
+static unsigned int getMaxKeyMapNameWidth(InputManager& inputManager)
 {
 	static unsigned int max = 0;
 
@@ -298,7 +313,7 @@ static unsigned int getMaxKeyMapNameWidth()
 		max = static_cast<int>(displayText.width());
 
 		char sKey[MAX_STR_LENGTH];
-		for (const KeyMapping& mapping : getVisibleMappings()) {
+		for (const KeyMapping& mapping : getVisibleMappings(inputManager)) {
 			mapping.toString(sKey);
 			displayText.setText(sKey, font_regular);
 			max = MAX(max, static_cast<unsigned int>(displayText.width()));
@@ -325,7 +340,7 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	const int numSlots = static_cast<int>(KeyMappingSlot::LAST);
 	const int buttonHeight = (parent.height() / numSlots);
 	const int layoutYOffset = buttonHeight * static_cast<int>(data.slot);
-	const int buttonWidth = getMaxKeyMapNameWidth();
+	const int buttonWidth = getMaxKeyMapNameWidth(data.targetFunctionData->inputManager);
 	psWidget->setGeometry(
 		parent.width() - buttonWidth,
 		layoutYOffset,
@@ -387,7 +402,7 @@ static void displayKeyMapLabel(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset)
 	DisplayKeyMapData& data = *static_cast<DisplayKeyMapData*>(psWidget->pUserData);
 
 	// Update layout
-	const int buttonWidth = getMaxKeyMapNameWidth();
+	const int buttonWidth = getMaxKeyMapNameWidth(data.inputManager);
 	psWidget->setGeometry(
 		0,
 		0,
@@ -405,37 +420,34 @@ static void displayKeyMapLabel(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset)
 }
 
 // ////////////////////////////////////////////////////////////////////////////
-static bool keyMapEditor(bool first, WIDGET *parent, bool isInGame)
+static bool keyMapEditor(InputManager& inputManager, const bool first, WIDGET *parent, const bool isInGame)
 {
 	if (first)
 	{
-		loadKeyMap();									// get the current mappings.
+		loadKeyMap(inputManager);
 	}
 
-	parent->attach(KeyMapForm::make(isInGame));
-
-	/* Stop when the right number or when alphabetically last - not sure...! */
-	/* Go home... */
+	parent->attach(KeyMapForm::make(inputManager, isInGame));
 	return true;
 }
 
-bool startInGameKeyMapEditor(bool first)
+bool startInGameKeyMapEditor(InputManager& inputManager, bool first)
 {
 	bAllowOtherKeyPresses = false;
-	return keyMapEditor(first, psWScreen->psForm.get(), true);
+	return keyMapEditor(inputManager, first, psWScreen->psForm.get(), true);
 }
 
-bool startKeyMapEditor(bool first)
+bool startKeyMapEditor(InputManager& inputManager, bool first)
 {
 	addBackdrop();
 	addSideText(FRONTEND_SIDETEXT, KM_SX, KM_Y, _("KEY MAPPING"));
 	WIDGET *parent = widgGetFromID(psWScreen, FRONTEND_BACKDROP);
-	return keyMapEditor(first, parent, false);
+	return keyMapEditor(inputManager, first, parent, false);
 }
 
 // ////////////////////////////////////////////////////////////////////////////
 // save current keymaps to registry
-bool saveKeyMap()
+bool saveKeyMap(const InputManager& inputManager)
 {
 	WzConfig ini(KeyMapPath, WzConfig::ReadAndWrite);
 	if (!ini.status() || !ini.isWritable())
@@ -448,7 +460,7 @@ bool saveKeyMap()
 	ini.setValue("version", 1);
 
 	ini.beginArray("mappings");
-	for (auto const &mapping : keyMappings)
+	for (auto const &mapping : inputManager.getAllMappings())
 	{
 		ini.setValue("meta", mapping.metaKeyCode);
 
@@ -504,12 +516,10 @@ static KeyMappingInput createInputForSource(const KeyMappingInputSource source, 
 }
 
 // load keymaps from registry.
-bool loadKeyMap()
+bool loadKeyMap(InputManager& inputManager)
 {
 	// throw away any keymaps!!
-	keyMappings.remove_if([](const KeyMapping& mapping) {
-		return mapping.info->type == KeyMappingType::ASSIGNABLE;
-	});
+	inputManager.clearAssignableMappings();
 
 	WzConfig ini(KeyMapPath, WzConfig::ReadOnly);
 	if (!ini.status())
@@ -544,7 +554,7 @@ bool loadKeyMap()
 		const WzString slotName = ini.value("slot", "primary").toWzString();
 		const KeyMappingSlot slot = keyMappingSlotByName(slotName.toUtf8().c_str());
 
-		keyAddMapping(meta, input, action, info->function, slot);
+		inputManager.addMapping(meta, input, action, info->function, slot);
 	}
 	ini.endArray();
 	return true;
@@ -660,7 +670,7 @@ void KeyMapForm::initialize(bool isInGame)
 			keyMapList->addItem(separator);
 		}
 
-		DisplayKeyMapData* data = new DisplayKeyMapData(info);
+		DisplayKeyMapData* data = new DisplayKeyMapData(inputManager, info);
 
 		const unsigned int numSlots = static_cast<unsigned int>(KeyMappingSlot::LAST);
 
@@ -691,7 +701,7 @@ void KeyMapForm::initialize(bool isInGame)
 			const auto button = createKeyMapButton(buttonId, slot, data);
 			container->attach(button);
 
-			data->mappings[slotIndex] = keyGetMappingFromFunction(info.function, slot);
+			data->mappings[slotIndex] = inputManager.getMappingFromFunction(info.function, slot);
 		}
 
 		keyMapList->addItem(container);
@@ -771,14 +781,14 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 	}
 
 	/* Clear down mappings using these keys */
-	clearKeyMappingIfConflicts(metakey, input, info.context);
+	inputManager.removeConflictingMappings(metakey, input, info.context);
 
 	/* Try and see if its there already - add it if not. e.g. secondary keybinds are expected to be null on default key sets */
 	const unsigned int slotIndex = static_cast<unsigned int>(keyMapSelection.slot);
-	KeyMapping* psMapping = keyGetMappingFromFunction(info.function, keyMapSelection.slot);
+	KeyMapping* psMapping = inputManager.getMappingFromFunction(info.function, keyMapSelection.slot);
 	if (!psMapping)
 	{
-		psMapping = keyAddMapping(metakey, input, KeyAction::PRESSED, info.function, keyMapSelection.slot);
+		psMapping = inputManager.addMapping(metakey, input, KeyAction::PRESSED, info.function, keyMapSelection.slot);
 		keyMapSelection.data->mappings[slotIndex] = psMapping;
 	}
 	else
