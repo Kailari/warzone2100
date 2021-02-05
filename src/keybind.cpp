@@ -1046,7 +1046,8 @@ void	kf_SelectPlayer()
 	}
 #endif
 
-	if (getLastInput().source != KeyMappingInputSource::KEY_CODE)
+	const auto lastKey = getLastInput().asKeyCode();
+	if (!lastKey.has_value())
 	{
 		return;
 	}
@@ -1054,7 +1055,7 @@ void	kf_SelectPlayer()
 	//store the current player
 	prevPlayer = selectedPlayer;
 
-	playerNumber = (getLastInput().value.keyCode - KEY_F1);
+	playerNumber = ((*lastKey) - KEY_CODE::KEY_F1);
 	if (playerNumber >= 10)
 	{
 		selectedPlayer = 0;
@@ -1146,12 +1147,13 @@ DEFINE_NUMED_KF(9)
 // --------------------------------------------------------------------------
 void	kf_SelectMoveGrouping()
 {
-	if (getLastInput().source != KeyMappingInputSource::KEY_CODE)
+	const auto lastKey = getLastInput().asKeyCode();
+	if (!lastKey.has_value())
 	{
 		return;
 	}
 
-	const UDWORD groupNumber = (getLastInput().value.keyCode - KEY_1) + 1;
+	const UDWORD groupNumber = ((*lastKey) - KEY_CODE::KEY_1) + 1;
 
 	activateGroupAndMove(selectedPlayer, groupNumber);
 }
@@ -1184,14 +1186,15 @@ void	kf_addMultiMenu()
 
 void	kf_JumpToMapMarker()
 {
-	if (getLastInput().source != KeyMappingInputSource::KEY_CODE)
+	const auto lastKey = getLastInput().asKeyCode();
+	if (!lastKey.has_value())
 	{
 		return;
 	}
 
 	if (!getRadarTrackingStatus())
 	{
-		const KEY_CODE entry = getLastInput().value.keyCode;
+		const KEY_CODE entry = *lastKey;
 //		CONPRINTF("Restoring map position %d:%d",getMarkerX(entry),getMarkerY(entry));
 		playerPos.p.x = getMarkerX(entry);
 		playerPos.p.z = getMarkerY(entry);
