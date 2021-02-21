@@ -330,15 +330,6 @@ static GAMECODE renderLoop()
 
 	pie_GetResetCounts(&loopPieCount, &loopPolyCount);
 
-	if (!quitting)
-	{
-		/* Check for toggling display mode */
-		if ((keyDown(KEY_LALT) || keyDown(KEY_RALT)) && keyPressed(KEY_RETURN))
-		{
-			war_setWindowMode(wzAltEnterToggleFullscreen());
-		}
-	}
-
 	// deal with the mission state
 	switch (loopMissionState)
 	{
@@ -387,11 +378,6 @@ static GAMECODE renderLoop()
 
 	if (quitting)
 	{
-		/* Check for toggling display mode */
-		if ((keyDown(KEY_LALT) || keyDown(KEY_RALT)) && keyPressed(KEY_RETURN))
-		{
-			war_setWindowMode(wzAltEnterToggleFullscreen());
-		}
 		return GAMECODE_QUITGAME;
 	}
 	else if (loop_GetVideoStatus())
