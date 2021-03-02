@@ -301,9 +301,10 @@ static std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings(
 		for (unsigned int slotIndex = 0; slotIndex < static_cast<unsigned int>(KeyMappingSlot::LAST); ++slotIndex)
 		{
 			const KeyMappingSlot slot = static_cast<KeyMappingSlot>(slotIndex);
-			if (const auto mapping = inputManager.getMapping(info, slot))
+			if (const nonstd::optional<std::reference_wrapper<KeyMapping>> maybeMapping = inputManager.getMapping(info, slot))
 			{
-				visibleMappings.push_back(*mapping);
+				const KeyMapping& mapping = maybeMapping.value();
+				visibleMappings.push_back(mapping);
 			}
 		}
 	}
@@ -592,7 +593,6 @@ std::shared_ptr<W_BUTTON> KeyMapForm::createKeyMapButton(const unsigned int butt
 		ASSERT_OR_RETURN(, clickedButton.pUserData != nullptr, "Key map buttons must have its pUserData initialized to a (DisplayKeyMapData*)");
 		const DisplayKeyMapButtonData& data = *static_cast<DisplayKeyMapButtonData*>(clickedButton.pUserData);
 
-		const int slotIndex = static_cast<unsigned int>(data.slot);
 		const KeyFunctionInfo& info = data.targetFunctionData.info;
 		if (info.type != KeyMappingType::ASSIGNABLE)
 		{
