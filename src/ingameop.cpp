@@ -384,7 +384,7 @@ bool intCloseInGameOptions(bool bPutUpLoadSave, bool bResetMissionWidgets)
 	isMouseOptionsUp = false;
 	if (isKeyMapEditorUp)
 	{
-		runInGameKeyMapEditor(gInputManager, KM_RETURN);
+		runInGameKeyMapEditor(gInputManager, gKeyFuncConfig, KM_RETURN);
 	}
 	isKeyMapEditorUp = false;
 	if (isMusicManagerUp)
@@ -847,7 +847,7 @@ void intProcessInGameOptions(UDWORD id)
 	}
 	else if (isKeyMapEditorUp)
 	{
-		if (runInGameKeyMapEditor(gInputManager, id))
+		if (runInGameKeyMapEditor(gInputManager, gKeyFuncConfig, id))
 		{
 			intCloseInGameOptions(true, true);
 		}
@@ -894,7 +894,7 @@ void intProcessInGameOptions(UDWORD id)
 		break;
 	case INTINGAMEOP_KEYMAP:			//keymap was pressed
 		widgDelete(psWScreen, INTINGAMEOP);  // get rid of the old stuff.
-		startInGameKeyMapEditor(gInputManager, false);
+		startInGameKeyMapEditor(gInputManager, gKeyFuncConfig, false);
 		isKeyMapEditorUp = true;
 		break;
 	case INTINGAMEOP_MUSICMANAGER:

@@ -876,7 +876,7 @@ bool frontendInitialise(const char *ResourceFile)
 	}
 
 	// reinitialise key mappings
-	gInputManager.resetMappings(false);
+	gInputManager.resetMappings(false, gKeyFuncConfig);
 
 	// Set the default uncoloured cursor here, since it looks slightly
 	// better for menus and such.
@@ -1132,7 +1132,7 @@ bool stageTwoInitialise()
 	}
 
 	// reinitialise key mappings
-	gInputManager.resetMappings(false);
+	gInputManager.resetMappings(false, gKeyFuncConfig);
 
 	// Set the default uncoloured cursor here, since it looks slightly
 	// better for menus and such.
