@@ -24,6 +24,8 @@
 
 #include "musicmanager.h"
 
+#include "lib/framework/frame.h"
+#include "lib/framework/input.h"
 #include "lib/ivis_opengl/pieblitfunc.h"
 #include "intdisplay.h"
 #include "hci.h"
@@ -31,7 +33,6 @@
 #include "frontend.h"
 #include "frend.h"
 #include "ingameop.h"
-#include "keymap.h"
 
 #include "lib/sound/playlist.h"
 #include "lib/widget/button.h"

@@ -55,7 +55,6 @@
 #include "lib/gamelib/gtime.h"
 #include "console.h"
 #include "keybind.h"
-#include "keymap.h"
 #include "qtscript.h"
 #include "clparse.h"
 #include "ingameop.h"
@@ -944,7 +943,8 @@ static void freeAutoSaveSlot(const char *path)
 bool autoSave()
 {
 	// Bail out if we're running a _true_ multiplayer game or are playing a tutorial/debug/cheating/autogames
-	if (runningMultiplayer() || bInTutorial || getDebugMappingStatus() || Cheated || autogame_enabled())
+	const DebugInputManager& dbgInputManager = gInputManager.debugManager();
+	if (runningMultiplayer() || bInTutorial || dbgInputManager.debugMappingsAllowed() || Cheated || autogame_enabled())
 	{
 		return false;
 	}

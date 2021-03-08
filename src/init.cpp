@@ -64,7 +64,6 @@
 #include "gateway.h"
 #include "hci.h"
 #include "intdisplay.h"
-#include "keymap.h"
 #include "levels.h"
 #include "lighting.h"
 #include "loop.h"
@@ -1332,7 +1331,8 @@ bool stageThreeInitialise()
 	}
 	else
 	{
-		if (getDebugMappingStatus())
+		const DebugInputManager& dbgInputManager = gInputManager.debugManager();
+		if (dbgInputManager.debugMappingsAllowed())
 		{
 			triggerEventCheatMode(true);
 		}
@@ -1447,8 +1447,9 @@ static void initMiscVars()
 	includeRedundantDesigns = false;
 	enableConsoleDisplay(true);
 
+	DebugInputManager& dbgInputManager = gInputManager.debugManager();
 	for (unsigned n = 0; n < MAX_PLAYERS; ++n)
 	{
-		processDebugMappings(n, false);
+		dbgInputManager.setPlayerWantsDebugMappings(n, false);
 	}
 }

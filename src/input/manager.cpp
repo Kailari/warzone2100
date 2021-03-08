@@ -167,6 +167,11 @@ std::vector<KeyMapping> InputManager::removeConflictingMappings(const KEY_CODE m
 	return conflicts;
 }
 
+DebugInputManager& InputManager::debugManager()
+{
+	return dbgInputManager;
+}
+
 void InputManager::shutdown()
 {
 	keyMappings.clear();
@@ -192,7 +197,7 @@ void InputManager::resetMappings(bool bForceDefaults, const KeyFunctionConfigura
 	bMappingsSortOrderDirty = true;
 	for (unsigned n = 0; n < MAX_PLAYERS; ++n)
 	{
-		processDebugMappings(n, false);
+		dbgInputManager.setPlayerWantsDebugMappings(n, false);
 	}
 
 	// load the mappings.
@@ -355,7 +360,7 @@ void InputManager::updateMapMarkers()
 
 // ----------------------------------------------------------------------------------
 /* allows checking if mapping should currently be ignored in processMappings */
-static bool isIgnoredMapping(const InputManager& inputManager, const bool bAllowMouseWheelEvents, const KeyMapping& mapping)
+static bool isIgnoredMapping(InputManager& inputManager, const bool bAllowMouseWheelEvents, const KeyMapping& mapping)
 {
 	if (!inputManager.isContextActive(mapping.info.context))
 	{
@@ -377,8 +382,10 @@ static bool isIgnoredMapping(const InputManager& inputManager, const bool bAllow
 		return true;
 	}
 
+	const DebugInputManager& dbgInputManager = inputManager.debugManager();
 	const bool bIsDebugMapping = mapping.info.context == InputContext::__DEBUG;
-	if (bIsDebugMapping && !getDebugMappingStatus()) {
+	if (bIsDebugMapping && !dbgInputManager.debugMappingsAllowed())
+	{
 		return true;
 	}
 
