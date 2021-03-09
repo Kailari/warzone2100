@@ -378,10 +378,10 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	const nonstd::optional<KeyMapping> mapping = data.targetFunctionData.mappings[static_cast<unsigned int>(data.slot)];
 	PIELIGHT bindingTextColor = WZCOL_FORM_TEXT;
 	char sPrimaryKey[MAX_STR_LENGTH];
-	if (mapping.has_value() && !mapping->input.isCleared())
+	if (mapping.has_value() && !mapping->keys.input.isCleared())
 	{
 		// Check to see if key is on the numpad, if so tell user and change color
-		const bool isBoundToNumpad = mapping->input.source == KeyMappingInputSource::KEY_CODE && mapping->input.value.keyCode >= KEY_KP_0 && mapping->input.value.keyCode <= KEY_KPENTER;
+		const bool isBoundToNumpad = mapping->keys.input.source == KeyMappingInputSource::KEY_CODE && mapping->keys.input.value.keyCode >= KEY_KP_0 && mapping->keys.input.value.keyCode <= KEY_KPENTER;
 		if (isBoundToNumpad)
 		{
 			bindingTextColor = WZCOL_YELLOW;
@@ -688,7 +688,7 @@ bool KeyMapForm::pushedKeyCombo(const KeyMappingInput input)
 	{
 		inputManager.mappings().remove(*maybeOld);
 	}
-	KeyMapping& newMapping = inputManager.mappings().add(metakey, input, KeyAction::PRESSED, *selectedInfo, keyMapSelection.slot);
+	KeyMapping& newMapping = inputManager.mappings().add({ metakey, input }, *selectedInfo, keyMapSelection.slot);
 
 	// Update display data for the new mapping
 	if (auto displayData = displayDataPerInfo[selectedInfo->name])
