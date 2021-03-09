@@ -72,16 +72,14 @@
 #define KM_ENTRYH			(16)
 
 struct DisplayKeyMapData {
-	explicit DisplayKeyMapData(InputManager& inputManager, const KeyFunctionConfiguration& keyFuncConfig, const KeyFunctionInfo& info)
+	explicit DisplayKeyMapData(InputManager& inputManager, const KeyFunctionInfo& info)
 		: inputManager(inputManager)
-		, keyFuncConfig(keyFuncConfig)
 		, mappings(std::vector<nonstd::optional<std::reference_wrapper<KeyMapping>>>(static_cast<unsigned int>(KeyMappingSlot::LAST), nonstd::nullopt))
 		, info(info)
 	{
 	}
 
 	InputManager& inputManager;
-	const KeyFunctionConfiguration& keyFuncConfig;
 	std::vector<nonstd::optional<std::reference_wrapper<KeyMapping>>> mappings;
 	const KeyFunctionInfo& info;
 
@@ -298,26 +296,21 @@ KeyFunctionEntries getVisibleKeyFunctionEntries(const KeyFunctionConfiguration& 
 	return visible;
 }
 
-static std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings(InputManager& inputManager, const KeyFunctionConfiguration& keyFuncConfig)
+static std::vector<std::reference_wrapper<const KeyMapping>> getVisibleMappings(const InputManager& inputManager)
 {
 	std::vector<std::reference_wrapper<const KeyMapping>> visibleMappings;
-	for (const KeyFunctionInfo& info : getVisibleKeyFunctionEntries(keyFuncConfig))
+	for (const KeyMapping& mapping : inputManager.cmappings())
 	{
-		for (unsigned int slotIndex = 0; slotIndex < static_cast<unsigned int>(KeyMappingSlot::LAST); ++slotIndex)
+		if (mapping.info.type != KeyMappingType::HIDDEN)
 		{
-			const KeyMappingSlot slot = static_cast<KeyMappingSlot>(slotIndex);
-			if (const nonstd::optional<std::reference_wrapper<KeyMapping>> maybeMapping = inputManager.mappings().get(info, slot))
-			{
-				const KeyMapping& mapping = maybeMapping.value();
-				visibleMappings.push_back(mapping);
-			}
+			visibleMappings.push_back(mapping);
 		}
 	}
 
 	return visibleMappings;
 }
 
-static unsigned int getMaxKeyMapNameWidth(InputManager& inputManager, const KeyFunctionConfiguration& keyFuncConfig)
+static unsigned int getMaxKeyMapNameWidth(InputManager& inputManager)
 {
 	static unsigned int max = 0;
 
@@ -327,7 +320,7 @@ static unsigned int getMaxKeyMapNameWidth(InputManager& inputManager, const KeyF
 		max = static_cast<int>(displayText.width());
 
 		char sKey[MAX_STR_LENGTH];
-		for (const KeyMapping& mapping : getVisibleMappings(inputManager, keyFuncConfig)) {
+		for (const KeyMapping& mapping : getVisibleMappings(inputManager)) {
 			mapping.toString(sKey);
 			displayText.setText(sKey, font_regular);
 			max = MAX(max, static_cast<unsigned int>(displayText.width()));
@@ -353,7 +346,7 @@ static void displayKeyMapButton(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset
 	const int numSlots = static_cast<int>(KeyMappingSlot::LAST);
 	const int buttonHeight = (parent.height() / numSlots);
 	const int layoutYOffset = buttonHeight * static_cast<int>(data.slot);
-	const int buttonWidth = getMaxKeyMapNameWidth(data.targetFunctionData.inputManager, data.targetFunctionData.keyFuncConfig);
+	const int buttonWidth = getMaxKeyMapNameWidth(data.targetFunctionData.inputManager);
 	psWidget->setGeometry(
 		parent.width() - buttonWidth,
 		layoutYOffset,
@@ -414,7 +407,7 @@ static void displayKeyMapLabel(WIDGET* psWidget, UDWORD xOffset, UDWORD yOffset)
 	DisplayKeyMapData& data = *static_cast<DisplayKeyMapData*>(psWidget->pUserData);
 
 	// Update layout
-	const int buttonWidth = getMaxKeyMapNameWidth(data.inputManager, data.keyFuncConfig);
+	const int buttonWidth = getMaxKeyMapNameWidth(data.inputManager);
 	psWidget->setGeometry(
 		0,
 		0,
@@ -687,7 +680,7 @@ void KeyMapForm::initialize(bool isInGame)
 			keyMapList->addItem(separator);
 		}
 
-		DisplayKeyMapData* data = new DisplayKeyMapData(inputManager, keyFuncConfig, info);
+		DisplayKeyMapData* data = new DisplayKeyMapData(inputManager, info);
 		displayDataPerInfo.insert({ info.name, data });
 
 		const unsigned int numSlots = static_cast<unsigned int>(KeyMappingSlot::LAST);
